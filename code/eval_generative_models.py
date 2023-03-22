@@ -7,6 +7,9 @@ from random import shuffle
 import numpy as np
 import torch
 import transformers
+
+from transformers import GPT2Config, GPT2Model, AutoTokenizer
+from trl import AutoModelForCausalLMWithValueHead
 from colorama import Back, Fore, Style, init
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
@@ -14,6 +17,8 @@ from tqdm import tqdm
 import dataloader
 from intersentence_loader import IntersentenceDataset
 from models import models
+
+
 
 init()
 
@@ -101,7 +106,8 @@ class BiasEvaluator(object):
             f"{Fore.LIGHTRED_EX}Evaluating bias on intrasentence tasks...{Style.RESET_ALL}")
 
         model = getattr(models, self.INTRASENTENCE_MODEL)(
-            self.PRETRAINED_CLASS).to(self.device)
+            self.INTERSENTENCE_LOAD_PATH).to(self.device)
+        
         model.eval()
 
         start_token = torch.tensor(self.tokenizer.encode(
@@ -144,8 +150,8 @@ class BiasEvaluator(object):
         return predictions
 
     def evaluate_intersentence(self):
-        model = getattr(models, self.INTERSENTENCE_MODEL)(
-            self.PRETRAINED_CLASS).to(self.device)
+        model = getattr(models, self.INTRASENTENCE_MODEL)(
+            self.INTERSENTENCE_LOAD_PATH).to(self.device)
 
         if self.PRETRAINED_CLASS == "gpt2-xl":
             model = amp.initialize(model, opt_level="O3")
@@ -250,8 +256,8 @@ class BiasEvaluator(object):
         print(
             f"{Fore.LIGHTBLUE_EX}Evaluating bias on intersentence tasks...{Style.RESET_ALL}")
         nsp_dim = 300
-        model = getattr(models, self.INTERSENTENCE_MODEL)(
-            self.PRETRAINED_CLASS, nsp_dim=nsp_dim).to(self.device)
+
+        model = getattr(models, self.INTERSENTENCE_MODEL)(self.PRETRAINED_CLASS, nsp_dim=nsp_dim).to(self.device)
 
         if "gpt2" in args.tokenizer.lower():
             print("Adding <PAD> token to tokenizer...")
@@ -263,7 +269,7 @@ class BiasEvaluator(object):
         model = torch.nn.DataParallel(model)
 
         if self.INTERSENTENCE_LOAD_PATH:
-            model.load_state_dict(torch.load(self.INTERSENTENCE_LOAD_PATH))
+            model.module.core_model.from_pretrained(self.INTERSENTENCE_LOAD_PATH)
 
         model.eval()
         dataset = IntersentenceDataset(self.tokenizer, args)
@@ -296,6 +302,13 @@ class BiasEvaluator(object):
 
     def evaluate(self):
         bias = {}
+        
+        # DROPOUT
+        # configuration = GPT2Config.from_pretrained('gpt2', resid_pdrop=0.2, embd_pdrop=0.2, attn_pdrop=0.2)
+        # RUN THESE LINES ONCE TO GENERATE THE FILES, THEN YOU CAN USE --intersentence-load-path
+        # new_model = AutoModelForCausalLMWithValueHead.from_pretrained("gpt2", config=configuration)
+        # new_model.save_pretrained("./models/rlhf_models", from_pt = True)
+
         if not self.SKIP_INTRASENTENCE:
             intrasentence_bias = self.evaluate_intrasentence()
             bias['intrasentence'] = intrasentence_bias

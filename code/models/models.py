@@ -1,5 +1,7 @@
 import transformers 
 from torch import nn
+from trl import AutoModelForCausalLMWithValueHead
+
 
 class BertLM(transformers.BertPreTrainedModel):
     def __init__(self):
@@ -41,7 +43,7 @@ class GPT2LM(transformers.GPT2PreTrainedModel):
         pass
 
     def __new__(self, pretrained_model):
-        return transformers.GPT2LMHeadModel.from_pretrained(pretrained_model)
+        return AutoModelForCausalLMWithValueHead.from_pretrained(pretrained_model)
 
 class ModelNSP(nn.Module):
     def __init__(self, pretrained_model, nsp_dim=300):
